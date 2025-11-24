@@ -106,13 +106,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Lấy DATABASE_URL từ Render – BẮT BUỘC
 DATABASE_URL = os.getenv("DATABASE_URL")
-
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL chưa được set trên Render!")
+    raise RuntimeError("DATABASE_URL chưa được set! Dùng Internal Database URL từ Render.")
 
-# Tạo engine
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -122,12 +119,7 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Import models (để SQLAlchemy biết tạo bảng nào)
-from core.models import Base  # <-- Đảm bảo đường dẫn đúng với project của bạn
-
-# CHỈ TẠO BẢNG – KHÔNG TẠO DB, KHÔNG KẾT NỐI LOCALHOST
-try:
-    Base.metadata.create_all(bind=engine)
-    print("Đã tạo bảng thành công (nếu chưa có)")
-except Exception as e:
-    print(f"Lỗi tạo bảng: {e}")
+# Tạo bảng nếu chưa có
+from core.models import Base
+Base.metadata.create_all(bind=engine)
+print("Đã tạo bảng thành công")

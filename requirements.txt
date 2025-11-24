@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pandas
+openpyxl
+python-levenshtein
+nanoid
+python-dotenv
+sqlalchemy 
+psycopg2-binary

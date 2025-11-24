@@ -1,0 +1,169 @@
+{
+  "info": {
+    "name": "Backend Address Converter 2025 - Full Tests",
+    "_postman_id": "b0d6d7d6-0000-4000-8000-000000000000",
+    "description": "Postman collection to test the full API of the project. Set `{{base_url}}` to your server (default: http://localhost:8000). Run `Upload and Detect` first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "task_id", "value": "" },
+    { "key": "configs", "value": "[]" },
+    { "key": "start_payload", "value": "" },
+    { "key": "updated_row_payload", "value": "{}" }
+  ],
+  "item": [
+    {
+      "name": "File operations",
+      "item": [
+        {
+          "name": "Upload and Detect",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/upload-and-detect", "host": ["{{base_url}}"], "path": ["upload-and-detect"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = {};",
+                  "try { json = pm.response.json(); } catch (e) { pm.test('Body is JSON', function(){ pm.expect.fail('Response is not valid JSON'); }); }",
+                  "pm.test('task_id exists', function() { pm.expect(json).to.have.property('task_id'); if (json.task_id) pm.environment.set('task_id', json.task_id); });",
+                  "pm.test('groups is an array', function() { pm.expect(json).to.have.property('groups'); pm.expect(json.groups).to.be.an('array'); if (json.groups) pm.environment.set('configs', JSON.stringify(json.groups)); });",
+                  "pm.test('all_columns exists', function() { pm.expect(json).to.have.property('all_columns'); });",
+                  "pm.test('sample_preview exists', function() { pm.expect(json).to.have.property('sample_preview'); });",
+                  "// JSON Schema validation for upload-and-detect response",
+                  "var uploadSchema = {",
+                  "  type: 'object',",
+                  "  required: ['task_id','groups','all_columns','rows','mb','suggested_workers','sample_preview'],",
+                  "  properties: {",
+                  "    task_id: { type: 'string' },",
+                  "    groups: { type: 'array' },",
+                  "    all_columns: { type: 'array' },",
+                  "    rows: { type: 'integer' },",
+                  "    mb: { type: 'number' },",
+                  "    suggested_workers: { type: 'integer' },",
+                  "    sample_preview: { type: 'object' }",
+                  "  },",
+                  "  additionalProperties: true",
+                  "};",
+                  "try { pm.test('Response matches upload schema', function() { pm.response.to.have.jsonSchema(uploadSchema); }); } catch(e) { /* ignore schema engine differences in some runtimes */ }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start Conversion",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{{start_payload}}" },
+            "url": { "raw": "{{base_url}}/start-conversion/{{task_id}}", "host": ["{{base_url}}"], "path": ["start-conversion", "{{task_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                    "try { var j = pm.response.json(); pm.test('Message exists', function(){ pm.expect(j).to.have.property('message'); }); } catch(e) { pm.test('Response is JSON', function(){ pm.expect.fail('Not JSON'); }); }",
+                    "// JSON Schema: simple message response",
+                    "var startSchema = { type: 'object', required: ['message'], properties: { message: { type: 'string' } }, additionalProperties: true };",
+                    "try { pm.test('Start conversion response matches schema', function(){ pm.response.to.have.jsonSchema(startSchema); }); } catch(e) { }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Task Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/tasks/{{task_id}}", "host": ["{{base_url}}"], "path": ["tasks", "{{task_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var j = {};",
+                  "try { j = pm.response.json(); } catch(e) { pm.test('Body is JSON', function(){ pm.expect.fail('Response is not JSON'); }); }",
+                  "pm.test('Has status field', function(){ pm.expect(j).to.have.property('status'); });",
+                  "// JSON Schema for task status (basic)",
+                  "var statusSchema = { type: 'object', required: ['status'], properties: { status: { type: 'string' }, result: { type: 'object' } }, additionalProperties: true };",
+                  "try { pm.test('Task status response matches schema', function(){ pm.response.to.have.jsonSchema(statusSchema); }); } catch(e) { }",
+                  "// If preview_ready and result.full_data present, save an example updated_row payload",
+                  "if (j.status === 'preview_ready' && j.result && j.result.full_data && j.result.full_data.length > 0) {",
+                  "  pm.environment.set('updated_row_payload', JSON.stringify(j.result.full_data[0]));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Row (example row_index=0)",
+          "request": {
+            "method": "PATCH",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"updated_row\": {{updated_row_payload}} }" },
+            "url": { "raw": "{{base_url}}/tasks/{{task_id}}/row/0", "host": ["{{base_url}}"], "path": ["tasks", "{{task_id}}", "row", "0"] }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "exec": [ "// Ensure updated_row_payload is present; default to empty object if not", "if (!pm.environment.get('updated_row_payload')) pm.environment.set('updated_row_payload', '{}');" ] }
+            },
+            {
+              "listen": "test",
+              "script": { "exec": [ "pm.test('Status is 200', function () { pm.response.to.have.status(200); });", "try { var u = pm.response.json(); var updateSchema = { type: 'object', required: ['message','row_index'], properties: { message: { type: 'string' }, row_index: { type: 'integer' } }, additionalProperties: true }; pm.test('Update row response matches schema', function(){ pm.response.to.have.jsonSchema(updateSchema); }); } catch(e) { }" ] }
+            }
+          ]
+        },
+        {
+          "name": "Download And Save",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/download-and-save/{{task_id}}", "host": ["{{base_url}}"], "path": ["download-and-save", "{{task_id}}"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status is 200 or 400 (no data)', function () { pm.expect(pm.response.code).to.be.oneOf([200,400]); });" ] } } ]
+        },
+        {
+          "name": "Get Filtered Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/tasks/{{task_id}}/filtered-data?filter_status=all&page=1&page_size=100", "host": ["{{base_url}}"], "path": ["tasks", "{{task_id}}", "filtered-data"], "query": [ { "key": "filter_status", "value": "all" }, { "key": "page", "value": "1" }, { "key": "page_size", "value": "100" } ] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "try { var j = pm.response.json(); pm.test('Response has total_rows', function(){ pm.expect(j).to.have.property('total_rows'); }); } catch(e) { pm.test('Body is JSON', function(){ pm.expect.fail('Not JSON'); }); }",
+                  "// JSON Schema for filtered-data response",
+                  "var filteredSchema = { type: 'object', required: ['total_rows','success_count','fail_count','page','page_size','total_pages','full_data'], properties: { total_rows: { type: 'integer' }, success_count: { type: 'integer' }, fail_count: { type: 'integer' }, page: { type: 'integer' }, page_size: { type: 'integer' }, total_pages: { type: 'integer' }, full_data: { type: 'array' } }, additionalProperties: true };",
+                  "try { pm.test('Filtered data matches schema', function(){ pm.response.to.have.jsonSchema(filteredSchema); }); } catch(e) { }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

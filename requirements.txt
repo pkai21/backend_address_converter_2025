@@ -7,4 +7,4 @@ python-levenshtein
 nanoid
 python-dotenv
 sqlalchemy 
-psycopg[binary]
+psycopg[binary,pool]

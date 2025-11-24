@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # URL mặc định cho local dev
-DEFAULT_URL = "postgresql://postgres:postgres@localhost:5432/address_converter"
-
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_URL)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL không được set! Vui lòng cấu hình trên Render.")
 
 # Tạo engine chính
 engine = create_engine(

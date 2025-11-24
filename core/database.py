@@ -108,23 +108,21 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL chưa được set!")
+    raise RuntimeError("DATABASE_URL chưa được set trên Render!")
 
-# BUỘC DÙNG psycopg v3 – FIX LỖI psycopg2
+# Buộc dùng psycopg v3
 DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://")
-
-# Nếu bạn muốn thêm sslmode thì thêm vào URL trên Render: ?sslmode=require
-# Hoặc để nguyên, psycopg v3 tự xử lý SSL tốt
 
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     pool_recycle=3600,
-    echo=False
+    echo=False,
+    connect_args={"sslmode": "require"}  # ← DÒNG NÀY LÀ CHÌA KHÓA VÀNG!
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 from core.models import Base
 Base.metadata.create_all(bind=engine)
-print("Đã tạo bảng thành công")
+print("Đã tạo bảng thành công – Backend đã live!")

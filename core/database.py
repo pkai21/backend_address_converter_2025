@@ -100,57 +100,34 @@
 
 # core/database.py
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import OperationalError
 from dotenv import load_dotenv
 
-# Load .env nếu chạy local (Render không cần)
 load_dotenv()
 
-# Lấy DATABASE_URL từ environment (Render sẽ cung cấp)
+# Lấy DATABASE_URL từ Render – BẮT BUỘC
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# BẮT BUỘC: Kiểm tra nếu chưa có → báo lỗi rõ ràng thay vì crash lặng lẽ
 if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL chưa được thiết lập! "
-        "Vui lòng thêm biến môi trường DATABASE_URL trên Render "
-        "(lấy từ PostgreSQL instance → Internal Database URL)"
-    )
+    raise RuntimeError("DATABASE_URL chưa được set trên Render!")
 
-# Tạo engine chính
+# Tạo engine
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     pool_recycle=3600,
-    echo=False,  # Đặt True nếu muốn xem SQL log khi debug
-    # Render yêu cầu thêm ?sslmode=require nếu dùng external URL
-    # Nhưng Internal URL thì không cần → nên để nguyên
+    echo=False
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Import models để SQLAlchemy biết tạo bảng nào
-# (Quan trọng: phải import sau khi tạo engine)
-from core.models import Base  # <-- Đảm bảo đường dẫn đúng
+# Import models (để SQLAlchemy biết tạo bảng nào)
+from core.models import Base  # <-- Đảm bảo đường dẫn đúng với project của bạn
 
-
-# Hàm khởi tạo DB + bảng – ĐÃ ĐƯỢC CHỈNH SỬA CHO RENDER
-def init_db():
-    """
-    Chỉ tạo bảng nếu chưa có.
-    Trên Render: DB đã được tạo thủ công → KHÔNG cố tạo DB mới.
-    """
-    try:
-        # Tạo tất cả bảng nếu chưa tồn tại
-        Base.metadata.create_all(bind=engine)
-        print("Đã kiểm tra và tạo bảng thành công (nếu chưa có)")
-    except Exception as e:
-        print(f"Lỗi khi tạo bảng: {e}")
-        # Không raise → app vẫn chạy được, chỉ thiếu bảng thôi
-
-
-# GỌI HÀM NÀY KHI APP KHỞI ĐỘNG
-# (Bạn có thể để ở đây hoặc gọi từ main.py)
-init_db()
+# CHỈ TẠO BẢNG – KHÔNG TẠO DB, KHÔNG KẾT NỐI LOCALHOST
+try:
+    Base.metadata.create_all(bind=engine)
+    print("Đã tạo bảng thành công (nếu chưa có)")
+except Exception as e:
+    print(f"Lỗi tạo bảng: {e}")

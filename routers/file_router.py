@@ -15,7 +15,7 @@ from nanoid import generate
 
 from core.conversion.utils.save_file import save_file
 from tasks.task_manager import apply_edits_to_result, create_task, get_merged_full_data, update_task, get_task
-from core.conversion.engine import convert_file_async
+from core.conversion.engine import convert_file_async, convert_file_blocking
 from core.conversion.load_file.file_info import get_file_info
 from core.conversion.utils.column_detector import identify_address_columns_smart
 from core.conversion import mapping_table, units
@@ -73,73 +73,79 @@ async def upload_and_detect(file: UploadFile = File(...)):
     update_task(task_id, pending_configs=configs)
 
     return {
-        "task_id": task_id,
-        "groups": configs,
-        "all_columns": info["names"],
-        "rows": rows,
-        "mb": mb,
-        "suggested_workers": suggested_workers,
-        "sample_preview": sample_preview
+        "data":{
+            "task_id": task_id,
+            "groups": configs,
+            "all_columns": info["names"],
+            "rows": rows,
+            "mb": mb,
+            "suggested_workers": suggested_workers,
+            "sample_preview": sample_preview
+        }
     }
 
 # 2. BẮT ĐẦU CHUYỂN ĐỔI VỚI CẤU HÌNH ĐÃ CHỌN
 @router.post("/start-conversion/{task_id}")
-async def start_conversion(task_id: str, payload: dict, background_tasks: BackgroundTasks):
+async def start_conversion(task_id: str, payload: dict):
     configs = payload.get("configs", [])
-    n_workers = payload.get("n_workers")
+    n_workers = payload.get("n_workers", 1)
 
     if not configs:
         raise HTTPException(400, detail="Chưa chọn nhóm địa chỉ nào!")
 
+    # Cập nhật trạng thái đang xử lý
     update_task(
         task_id,
         selected_configs=configs,
         n_workers=n_workers,
         status="processing",
-        progress=10,
-        message="Đang chuẩn bị xử lý song song..."
+        progress=0,
+        message="Đang chuyển đổi (đồng bộ, vui lòng chờ)...",
     )
 
-    background_tasks.add_task(convert_file_async, task_id)
+    # Chạy blocking (đồng bộ) – vì FE đang chờ response
+    await convert_file_blocking(task_id)
 
-    return {"message": "Đã bắt đầu chuyển đổi!"}
+    # Sau khi xong → lấy kết quả cuối cùng
+    merged_data = get_merged_full_data(task_id)
+    success_count = sum(1 for r in merged_data if r.get("Trạng thái chuyển đổi") == "Thành công")
+    fail_count = len(merged_data) - success_count
+    progress = round(success_count / len(merged_data) * 100, 1) if merged_data else 100
+
+    # Cập nhật task thành công
+    update_task(
+        task_id,
+        status="preview_ready",
+        progress=100,
+        message="HOÀN THÀNH! Sẵn sàng xem kết quả và chỉnh sửa",
+        result={
+            "total_rows": len(merged_data),
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "full_data": merged_data  # có thể bỏ nếu FE không cần full ngay
+        }
+    )
+
+    # Trả về luôn task đầy đủ → FE không cần gọi thêm gì nữa!
+    task = get_task(task_id)
+
+    return {
+        "data": {
+            "task": task,
+            "message": "Chuyển đổi hoàn tất!",
+            "progress": 100,
+            "status": "preview_ready"
+        }
+    }
 
 # 3. LẤY TRẠNG THÁI TASK VÀ DỮ LIỆU ĐÃ XỬ LÝ (NẾU CÓ)
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
-    task = get_task(task_id)  
+    task = get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task không tồn tại")
 
-    def json_stream():
-        yield "{"
-        first = True
-        for key, value in task.items():
-            if not first:
-                yield ","
-            first = False
-
-            if key == "result" and value and "full_data" in value:
-                merged_data = get_merged_full_data(task_id)  # ← Dùng merged_data ở đây luôn!
-
-                yield f'"{key}":{{'
-                yield f'"total_rows": {value.get("total_rows", 0)},'
-                # Cập nhật lại success_count thực tế sau khi đã merge edit
-                actual_success = len([r for r in merged_data if r.get("Trạng thái chuyển đổi") == "Thành công"])
-                yield f'"success_count": {actual_success},'
-                yield f'"fail_count": {len(merged_data) - actual_success},'
-                yield '"full_data":['
-                for i, row in enumerate(merged_data):  # ← Dùng merged_data, không phải full_data!!!
-                    if i > 0:
-                        yield ","
-                    yield json.dumps(row, ensure_ascii=False)
-                yield "]}"
-            else:
-                # ← Fix lỗi Timestamp, numpy ở đây luôn
-                safe_value = json.loads(json.dumps(value, default=str)) if value is not None else None
-                yield f'"{key}": {json.dumps(safe_value, ensure_ascii=False)}'
-        yield "}"
-    return StreamingResponse(json_stream(), media_type="application/json")
+    return {"data": {"task": task}}
 
 # 4. CẬP NHẬT DÒNG ĐÃ CHỈNH SỬA TỪ FRONTEND
 @router.patch("/tasks/{task_id}/row/{row_index}")
@@ -179,15 +185,17 @@ async def update_row(task_id: str, row_index: int, updated_row: dict):
 
     # Trả lại đủ thứ FE cần để update realtime
     return {
-        "message": "Đã lưu chỉnh sửa thành công",
-        "row_index": row_index,
-        "updated_row": updated_row,                  
-        "status": "Thành công",                      
-        "total_rows": len(merged_data),
-        "success_count": new_success,                
-        "fail_count": new_fail,                      
-        "progress": round(new_success / len(merged_data) * 100, 1) if merged_data else 100,
-        "saved_at": datetime.now().isoformat()
+        "data": {
+            "message": "Đã lưu chỉnh sửa thành công",
+            "row_index": row_index,
+            "updated_row": updated_row,                  
+            "status": "Thành công",                      
+            "total_rows": len(merged_data),
+            "success_count": new_success,                
+            "fail_count": new_fail,                      
+            "progress": round(new_success / len(merged_data) * 100, 1) if merged_data else 100,
+            "saved_at": datetime.now().isoformat()
+        }
     }
 
 # 5. TẢI FILE KẾT QUẢ ĐÃ CHUYỂN ĐỔI VỀ
@@ -246,13 +254,16 @@ async def get_filtered_data(
     start = (page - 1) * page_size
     end = start + page_size
     paginated = filtered[start:end]
-
+    
     return {
-        "total_rows": total,
-        "success_count": sum(1 for r in filtered if r.get("Trạng thái chuyển đổi") == "Thành công"),
-        "fail_count": total - sum(1 for r in filtered if r.get("Trạng thái chuyển đổi") == "Thành công"),
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size,
-        "full_data": paginated  
+        "data": {
+            "total_rows": total,
+            "success_count": sum(1 for r in filtered if r.get("Trạng thái chuyển đổi") == "Thành công"),
+            "fail_count": total - sum(1 for r in filtered if r.get("Trạng thái chuyển đổi") == "Thành công"),
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "full_data": paginated,
+            "task_status": task.get("status"),  
+        }
     }

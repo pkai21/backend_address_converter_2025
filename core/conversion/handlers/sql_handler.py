@@ -136,7 +136,7 @@ def generate_sql_inserts(df: pd.DataFrame, table_name: str, columns: list) -> st
 
 def process_sql(input_file: str, 
                 map_dict: Dict[Tuple[str, str, str], List[Tuple[str, str, str, str]]], 
-                address_configs=None,
+                address_groups=None,
                 pool=None) -> bool:
     """Xử lý SQL HOÀN CHỈNH (.sql) - DEBUG MAPPING CHI TIẾT"""
     
@@ -161,7 +161,7 @@ def process_sql(input_file: str,
         # -------------------------------------------------
         # 3. XỬ LÝ DATAFRAME
         # -------------------------------------------------
-        for idx, (id_p, id_d, id_w, p, d, w) in enumerate(address_configs):
+        for idx, (id_p, id_d, id_w, p, d, w) in enumerate(address_groups):
             suffix = f"_group{idx+1}"
             df = process_df_with_suffix(df, map_dict,
                                         id_province_col=id_p, 
@@ -175,6 +175,8 @@ def process_sql(input_file: str,
 
     count_success = (df['Trạng thái chuyển đổi'] == 'Thành công').sum()
     count_fail = len(df) - count_success
+    
+    df.insert(0, 'id_VNA', df.index + 1)
     
     return {
         "success": True,

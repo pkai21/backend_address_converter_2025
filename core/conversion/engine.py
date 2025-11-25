@@ -30,13 +30,13 @@ def convert_file_async(task_id: str):
         update_task(task_id, progress=15, message=f"Sử dụng {n_workers} luồng ({worker_source})")
 
         # CHUYỂN CONFIG
-        raw_configs = current_task.get("selected_configs", [])
-        if not raw_configs:
+        raw_groups = current_task.get("selected_groups", [])
+        if not raw_groups:
             raise Exception("Không có nhóm địa chỉ nào được chọn!")
 
-        address_configs = []
-        for cfg in raw_configs:
-            address_configs.append((
+        address_groups = []
+        for cfg in raw_groups:
+            address_groups.append((
                 cfg.get("id_province"),
                 cfg.get("id_district"),
                 cfg.get("id_ward"),
@@ -45,7 +45,7 @@ def convert_file_async(task_id: str):
                 cfg.get("ward")
             ))
 
-        update_task(task_id, progress=25, message=f"Đang xử lý {len(address_configs)} nhóm địa chỉ...")
+        update_task(task_id, progress=25, message=f"Đang xử lý {len(address_groups)} nhóm địa chỉ...")
 
         handler_func = get_handler(input_path.suffix)
         if not handler_func:
@@ -58,7 +58,7 @@ def convert_file_async(task_id: str):
             result = handler_func(
                 input_file=str_input_path,
                 map_dict=mapping_table,
-                address_configs=address_configs,
+                address_groups=address_groups,
                 pool=pool
             )
 
@@ -102,13 +102,13 @@ def _run_conversion_sync(task_id: str) -> None:
         worker_source = "người dùng chọn" if current_task.get("n_workers") else "đề xuất"
         update_task(task_id, progress=15, message=f"Sử dụng {n_workers} luồng ({worker_source})")
 
-        raw_configs = current_task.get("selected_configs", [])
-        if not raw_configs:
+        raw_groups = current_task.get("selected_groups", [])
+        if not raw_groups:
             raise Exception("Không có nhóm địa chỉ nào được chọn!")
 
-        address_configs = []
-        for cfg in raw_configs:
-            address_configs.append((
+        address_groups = []
+        for cfg in raw_groups:
+            address_groups.append((
                 cfg.get("id_province"),
                 cfg.get("id_district"),
                 cfg.get("id_ward"),
@@ -117,7 +117,7 @@ def _run_conversion_sync(task_id: str) -> None:
                 cfg.get("ward")
             ))
 
-        update_task(task_id, progress=25, message=f"Đang xử lý {len(address_configs)} nhóm địa chỉ...")
+        update_task(task_id, progress=25, message=f"Đang xử lý {len(address_groups)} nhóm địa chỉ...")
 
         handler_func = get_handler(input_path.suffix)
         if not handler_func:
@@ -129,7 +129,7 @@ def _run_conversion_sync(task_id: str) -> None:
             result = handler_func(
                 input_file=str_input_path,
                 map_dict=mapping_table,
-                address_configs=address_configs,
+                address_groups=address_groups,
                 pool=pool
             )
 

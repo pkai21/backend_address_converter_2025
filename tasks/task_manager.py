@@ -15,8 +15,9 @@ def create_task(task_id: str, filename: str, filesize: int, suggested_workers: i
             filesize=filesize,
             suggested_workers=suggested_workers,
             n_workers=suggested_workers,
-            pending_configs=[],     
-            selected_configs=[],
+            pending_groups=[],     
+            selected_groups=[],
+            columns=[],
             status="pending",
             progress=0,
             message="Đang chờ xử lý...",
@@ -54,7 +55,7 @@ def update_task(task_id: str, **kwargs):
             if key == "progress":
                 value = min(100, max(0, int(value or 0)))
 
-            if key in ("pending_configs", "selected_configs", "result") and value is not None:
+            if key in ("pending_groups", "selected_groups", "columns", "result") and value is not None:
                 value = json.loads(json.dumps(value, default=str))
 
             setattr(task, key, value)
@@ -78,8 +79,9 @@ def get_task(task_id: str) -> dict | None:
             "created_at": task.created_at.isoformat() if task.created_at else None,
             "suggested_workers": task.suggested_workers or 1,
             "n_workers": task.n_workers or 1,
-            "pending_configs": task.pending_configs or [],
-            "selected_configs": task.selected_configs or [],
+            "pending_groups": task.pending_groups or [],
+            "selected_groups": task.selected_groups or [],
+            "columns": task.columns or [],
             "result": task.result or {}
         }
 

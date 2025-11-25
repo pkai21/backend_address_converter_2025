@@ -57,8 +57,9 @@ def init_db():
                 suggested_workers INTEGER,
                 n_workers INTEGER,
                 
-                pending_configs JSONB DEFAULT '[]',
-                selected_configs JSONB DEFAULT '[]',
+                pending_groups JSONB DEFAULT '[]',
+                selected_groups JSONB DEFAULT '[]',
+                columns JSONB DEFAULT '[]',
                 
                 result JSONB,
                 

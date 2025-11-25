@@ -53,15 +53,15 @@ async def upload_and_detect(file: UploadFile = File(...)):
     sample_df = info["sample_df"].head(5).fillna("")
     sample_preview = {
         "columns": sample_df.columns.tolist(),
-        "rows": sample_df.to_dict(orient="records")
+        "data_rows": sample_df.to_dict(orient="records")
     }
 
-    groups, _ = identify_address_columns_smart(info["sample_df"], units)
+    configs, _ = identify_address_columns_smart(info["sample_df"], units)
 
-    configs = []
-    for g in groups:
+    groups = []
+    for g in configs:
         id_p, id_d, id_w, p, d, w = g
-        configs.append({
+        groups.append({
             "id_province": id_p,
             "id_district": id_d,
             "id_ward": id_w,
@@ -70,12 +70,12 @@ async def upload_and_detect(file: UploadFile = File(...)):
             "ward": w
         })
 
-    update_task(task_id, pending_configs=configs)
+    update_task(task_id, pending_groups=groups)
 
     return {
         "data":{
             "task_id": task_id,
-            "groups": configs,
+            "groups": groups,
             "all_columns": info["names"],
             "rows": rows,
             "mb": mb,
@@ -87,16 +87,16 @@ async def upload_and_detect(file: UploadFile = File(...)):
 # 2. BẮT ĐẦU CHUYỂN ĐỔI VỚI CẤU HÌNH ĐÃ CHỌN
 @router.post("/start-conversion/{task_id}")
 async def start_conversion(task_id: str, payload: dict):
-    configs = payload.get("configs", [])
+    groups = payload.get("groups", [])
     n_workers = payload.get("n_workers", 1)
 
-    if not configs:
+    if not groups:
         raise HTTPException(400, detail="Chưa chọn nhóm địa chỉ nào!")
 
     # Cập nhật trạng thái đang xử lý
     update_task(
         task_id,
-        selected_configs=configs,
+        selected_groups=groups,
         n_workers=n_workers,
         status="processing",
         progress=0,
@@ -118,11 +118,12 @@ async def start_conversion(task_id: str, payload: dict):
         status="preview_ready",
         progress=100,
         message="HOÀN THÀNH! Sẵn sàng xem kết quả và chỉnh sửa",
+        columns= [col for col in (merged_data[0].keys() if merged_data else []) if col != "id_VNA"],
         result={
             "total_rows": len(merged_data),
             "success_count": success_count,
             "fail_count": fail_count,
-            "full_data": merged_data  # có thể bỏ nếu FE không cần full ngay
+            "full_data": merged_data  
         }
     )
 
@@ -147,23 +148,33 @@ async def get_task_status(task_id: str):
 
     return {"data": {"task": task}}
 
-# 4. CẬP NHẬT DÒNG ĐÃ CHỈNH SỬA TỪ FRONTEND
-@router.patch("/tasks/{task_id}/row/{row_index}")
-async def update_row(task_id: str, row_index: int, updated_row: dict):
+# 4. CẬP NHẬT DÒNG THEO id_VNA 
+@router.patch("/tasks/{task_id}/row-by-id-vna/{id_vna}")
+async def update_row_by_id_vna(task_id: str, id_vna: str, updated_row: dict):
     task = get_task(task_id)
     if not task or task.get("status") != "preview_ready":
         raise HTTPException(404, detail="Task không tồn tại hoặc chưa sẵn sàng")
 
-    full_data = task["result"]["full_data"]
-    if row_index < 0 or row_index >= len(full_data):
-        raise HTTPException(400, detail="Dòng không hợp lệ")
+    full_data = get_merged_full_data(task_id)
+    
+    # Tìm dòng theo id_VNA (duy nhất)
+    row_index = None
+    original_row = None
+    for idx, row in enumerate(full_data):
+        if str(row.get("id_VNA")) == str(id_vna):  
+            row_index = idx
+            original_row = row.copy()
+            break
 
-    original_row = full_data[row_index].copy()
+    if row_index is None:
+        raise HTTPException(404, detail=f"Không tìm thấy dòng có id_VNA = {id_vna}")
 
-    # Đánh dấu thành công
-    updated_row = {**updated_row, "Trạng thái chuyển đổi": "Thành công"}
+    updated_row = {
+        **original_row,                   
+        **updated_row,                    
+        "Trạng thái chuyển đổi": "Thành công"
+    }
 
-    # Lưu vào bảng task_edits (upsert)
     with Session(engine) as db:
         stmt = postgresql_insert(TaskEdit).values(
             task_id=task_id,
@@ -173,27 +184,31 @@ async def update_row(task_id: str, row_index: int, updated_row: dict):
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=['task_id', 'row_index'],
-            set_={"edited_row": updated_row, "edited_at": func.now()}
+            set_={
+                "edited_row": updated_row,
+                "original_row": original_row,    
+                "edited_at": func.now()
+            }
         )
         db.execute(stmt)
         db.commit()
 
-    # Tính lại thống kê sau khi đã apply edit
+    # Tính lại thống kê
     merged_data = get_merged_full_data(task_id)
     new_success = sum(1 for r in merged_data if r.get("Trạng thái chuyển đổi") == "Thành công")
     new_fail = len(merged_data) - new_success
+    new_progress = round(new_success / len(merged_data) * 100, 1) if merged_data else 100
 
-    # Trả lại đủ thứ FE cần để update realtime
     return {
         "data": {
             "message": "Đã lưu chỉnh sửa thành công",
-            "row_index": row_index,
-            "updated_row": updated_row,                  
-            "status": "Thành công",                      
+            "id_VNA": id_vna,
+            "row_index": row_index,                   
+            "updated_row": updated_row,
             "total_rows": len(merged_data),
-            "success_count": new_success,                
-            "fail_count": new_fail,                      
-            "progress": round(new_success / len(merged_data) * 100, 1) if merged_data else 100,
+            "success_count": new_success,
+            "fail_count": new_fail,
+            "progress": new_progress,
             "saved_at": datetime.now().isoformat()
         }
     }

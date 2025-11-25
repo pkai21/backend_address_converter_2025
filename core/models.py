@@ -22,8 +22,9 @@ class Task(Base):
     suggested_workers = Column(Integer)
     n_workers = Column(Integer)
 
-    pending_configs = Column(JSONB, default=list)
-    selected_configs = Column(JSONB, default=list)
+    pending_groups = Column(JSONB, default=list)
+    selected_groups = Column(JSONB, default=list)
+    columns = Column(JSONB, default=list)
     result = Column(JSONB, nullable=True)
 
 class TaskEdit(Base):

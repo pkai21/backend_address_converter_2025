@@ -118,9 +118,9 @@ async def start_conversion(task_id: str, payload: dict):
     update_task(
         task_id,
         status="preview_ready",
-        progress=100,
+        progress= progress,
         message="HOÀN THÀNH! Sẵn sàng xem kết quả và chỉnh sửa",
-        columns= [col for col in (merged_data[0].keys() if merged_data else []) if col != "id_VNA"],
+        columns= [col for col in (merged_data[0].keys() if merged_data else []) if col != "id"],
         step = 2,
         result={
             "total_rows": len(merged_data),
@@ -140,7 +140,7 @@ async def start_conversion(task_id: str, payload: dict):
         }
     }
 
-# 3. LẤY TRẠNG THÁI TASK VÀ DỮ LIỆU ĐÃ XỬ LÝ (NẾU CÓ)
+# 3. LẤY TRẠNG THÁI TASK VÀ DỮ LIỆU ĐÃ XỬ LÝ 
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     task = get_task(task_id)
@@ -149,26 +149,26 @@ async def get_task_status(task_id: str):
 
     return {"data": {"task": task}}
 
-# 4. CẬP NHẬT DÒNG THEO id_VNA 
-@router.patch("/tasks/{task_id}/row-by-id-vna/{id_vna}")
-async def update_row_by_id_vna(task_id: str, id_vna: str, updated_row: dict):
+# 4. CẬP NHẬT DÒNG THEO id 
+@router.post("/tasks/{task_id}/row-by-id/{id}")
+async def update_row_by_id(task_id: str, id: str, updated_row: dict):
     task = get_task(task_id)
     if not task or task.get("status") != "preview_ready":
         raise HTTPException(404, detail="Task không tồn tại hoặc chưa sẵn sàng")
 
     full_data = get_merged_full_data(task_id)
     
-    # Tìm dòng theo id_VNA (duy nhất)
+    # Tìm dòng theo id (duy nhất)
     row_index = None
     original_row = None
     for idx, row in enumerate(full_data):
-        if str(row.get("id_VNA")) == str(id_vna):  
+        if str(row.get("id")) == str(id):  
             row_index = idx
             original_row = row.copy()
             break
 
     if row_index is None:
-        raise HTTPException(404, detail=f"Không tìm thấy dòng có id_VNA = {id_vna}")
+        raise HTTPException(404, detail=f"Không tìm thấy dòng có id = {id}")
 
     updated_row = {
         **original_row,                   
@@ -200,12 +200,12 @@ async def update_row_by_id_vna(task_id: str, id_vna: str, updated_row: dict):
     new_fail = len(merged_data) - new_success
     new_progress = round(new_success / len(merged_data) * 100, 1) if merged_data else 100
 
-    update_task(task_id, step = 2)
+    update_task(task_id, step=2, result={"success_count": new_success, "fail_count": new_fail, "full_data": merged_data})
 
     return {
         "data": {
             "message": "Đã lưu chỉnh sửa thành công",
-            "id_VNA": id_vna,
+            "id": id,
             "row_index": row_index,                   
             "updated_row": updated_row,
             "total_rows": len(merged_data),
@@ -260,8 +260,7 @@ async def get_filtered_data(
     if not task or task.get("status") != "preview_ready":
         raise HTTPException(404, detail="Task không tồn tại")
 
-    full_data = get_merged_full_data(task_id)
-
+    full_data = get_merged_full_data(task_id) 
     # Lọc
     if filter_status == "success":
         filtered = [r for r in full_data if r.get("statusState") == "Thành công"]
@@ -270,24 +269,33 @@ async def get_filtered_data(
     else:
         filtered = full_data
 
-    # Phân trang
-    total = len(filtered)
-    start = (page - 1) * page_size
-    end = start + page_size
-    paginated = filtered[start:end]
-    
-    update_task(task_id, step = 2)
-    
+    update_task(task_id, step = 2, created_at = datetime.now().isoformat())
+
+    task = get_task(task_id)
+
     return {
         "data": {
-            "step": 2,
-            "total_rows": total,
-            "success_count": sum(1 for r in filtered if r.get("statusState") == "Thành công"),
-            "fail_count": total - sum(1 for r in filtered if r.get("statusState") == "Thành công"),
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
-            "full_data": paginated,
-            "task_status": task.get("status"),  
+            "task": {
+                "task_id": task_id,
+                "filename":task['filename'],
+                "filesize": task['filesize'],
+                "status": "preview_ready",
+                "progress": task['progress'],
+                "message": "HOÀN THÀNH LỌC! Sẵn sàng xem kết quả và chỉnh sửa",
+                "created_at": datetime.now().isoformat(),
+                "suggested_workers": task['suggested_workers'],
+                "n_workers": task['n_workers'],
+                "pending_groups": task['pending_groups'],
+                "selected_groups": task['selected_groups'],
+                "columns": task['columns'] ,
+                "step": 2,
+                "result": {
+                    "total_rows": len(full_data),
+                    "fail_count": task['result']['fail_count'],
+                    "success_count": task['result']['success_count'],
+                    "full_data": filtered
+                }
+            },
+            "message": "Lọc hoàn tất!"
         }
     }

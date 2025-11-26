@@ -81,8 +81,8 @@ def save_file(df: pd.DataFrame, output_file: str) -> bool:
     """
     if 'statusState' in df.columns:
         df = df.drop(columns=['statusState'])
-    if 'id_VNA' in df.columns:
-        df = df.drop(columns=['id_VNA'])
+    if 'id' in df.columns:
+        df = df.drop(columns=['id'])
         
     ext = os.path.splitext(output_file)[1].lower()
     if ext == '.xlsx' or ext == '.xls' :

@@ -176,7 +176,7 @@ def process_sql(input_file: str,
     count_success = (df['statusState'] == 'Thành công').sum()
     count_fail = len(df) - count_success
     
-    df.insert(0, 'id_VNA', df.index + 1)
+    df.insert(0, 'id', df.index + 1)
     
     return {
         "success": True,

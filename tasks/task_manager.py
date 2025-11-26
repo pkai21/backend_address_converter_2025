@@ -56,7 +56,7 @@ def update_task(task_id: str, **kwargs):
             if key == "progress":
                 value = min(100, max(0, int(value or 0)))
 
-            if key in ("pending_groups", "selected_groups", "columns","step", "result") and value is not None:
+            if key in ("pending_groups", "selected_groups", "columns","step", "result", "created_at") and value is not None:
                 value = json.loads(json.dumps(value, default=str))
 
             setattr(task, key, value)

@@ -60,7 +60,7 @@ def init_db():
                 pending_groups JSONB DEFAULT '[]',
                 selected_groups JSONB DEFAULT '[]',
                 columns JSONB DEFAULT '[]',
-                
+                step INTEGER DEFAULT 0,
                 result JSONB,
                 
                 UNIQUE(task_id)

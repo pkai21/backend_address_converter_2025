@@ -70,11 +70,12 @@ async def upload_and_detect(file: UploadFile = File(...)):
             "ward": w
         })
 
-    update_task(task_id, pending_groups=groups)
+    update_task(task_id, pending_groups=groups, step = 1)
 
     return {
         "data":{
             "task_id": task_id,
+            "step": 1,
             "groups": groups,
             "all_columns": info["names"],
             "rows": rows,
@@ -100,6 +101,7 @@ async def start_conversion(task_id: str, payload: dict):
         n_workers=n_workers,
         status="processing",
         progress=0,
+        step = 1,
         message="Đang chuyển đổi (đồng bộ, vui lòng chờ)...",
     )
 
@@ -108,7 +110,7 @@ async def start_conversion(task_id: str, payload: dict):
 
     # Sau khi xong → lấy kết quả cuối cùng
     merged_data = get_merged_full_data(task_id)
-    success_count = sum(1 for r in merged_data if r.get("Trạng thái chuyển đổi") == "Thành công")
+    success_count = sum(1 for r in merged_data if r.get("statusState") == "Thành công")
     fail_count = len(merged_data) - success_count
     progress = round(success_count / len(merged_data) * 100, 1) if merged_data else 100
 
@@ -119,6 +121,7 @@ async def start_conversion(task_id: str, payload: dict):
         progress=100,
         message="HOÀN THÀNH! Sẵn sàng xem kết quả và chỉnh sửa",
         columns= [col for col in (merged_data[0].keys() if merged_data else []) if col != "id_VNA"],
+        step = 2,
         result={
             "total_rows": len(merged_data),
             "success_count": success_count,
@@ -134,8 +137,6 @@ async def start_conversion(task_id: str, payload: dict):
         "data": {
             "task": task,
             "message": "Chuyển đổi hoàn tất!",
-            "progress": 100,
-            "status": "preview_ready"
         }
     }
 
@@ -172,7 +173,7 @@ async def update_row_by_id_vna(task_id: str, id_vna: str, updated_row: dict):
     updated_row = {
         **original_row,                   
         **updated_row,                    
-        "Trạng thái chuyển đổi": "Thành công"
+        "statusState": "Thành công"
     }
 
     with Session(engine) as db:
@@ -195,9 +196,11 @@ async def update_row_by_id_vna(task_id: str, id_vna: str, updated_row: dict):
 
     # Tính lại thống kê
     merged_data = get_merged_full_data(task_id)
-    new_success = sum(1 for r in merged_data if r.get("Trạng thái chuyển đổi") == "Thành công")
+    new_success = sum(1 for r in merged_data if r.get("statusState") == "Thành công")
     new_fail = len(merged_data) - new_success
     new_progress = round(new_success / len(merged_data) * 100, 1) if merged_data else 100
+
+    update_task(task_id, step = 2)
 
     return {
         "data": {
@@ -209,6 +212,7 @@ async def update_row_by_id_vna(task_id: str, id_vna: str, updated_row: dict):
             "success_count": new_success,
             "fail_count": new_fail,
             "progress": new_progress,
+            "step": 2,
             "saved_at": datetime.now().isoformat()
         }
     }
@@ -236,6 +240,8 @@ async def download_and_save(task_id: str):
     if not success:
         raise HTTPException(500, detail="Lỗi lưu file")
 
+    update_task(task_id, step = 2)
+
     return FileResponse(
         path=safe_output_path,
         filename=Path(safe_output_path).name,
@@ -258,9 +264,9 @@ async def get_filtered_data(
 
     # Lọc
     if filter_status == "success":
-        filtered = [r for r in full_data if r.get("Trạng thái chuyển đổi") == "Thành công"]
+        filtered = [r for r in full_data if r.get("statusState") == "Thành công"]
     elif filter_status == "error":
-        filtered = [r for r in full_data if r.get("Trạng thái chuyển đổi") != "Thành công"]
+        filtered = [r for r in full_data if r.get("statusState") != "Thành công"]
     else:
         filtered = full_data
 
@@ -270,11 +276,14 @@ async def get_filtered_data(
     end = start + page_size
     paginated = filtered[start:end]
     
+    update_task(task_id, step = 2)
+    
     return {
         "data": {
+            "step": 2,
             "total_rows": total,
-            "success_count": sum(1 for r in filtered if r.get("Trạng thái chuyển đổi") == "Thành công"),
-            "fail_count": total - sum(1 for r in filtered if r.get("Trạng thái chuyển đổi") == "Thành công"),
+            "success_count": sum(1 for r in filtered if r.get("statusState") == "Thành công"),
+            "fail_count": total - sum(1 for r in filtered if r.get("statusState") == "Thành công"),
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size,

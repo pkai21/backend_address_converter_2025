@@ -79,8 +79,10 @@ def save_file(df: pd.DataFrame, output_file: str) -> bool:
     Hỗ trợ: .xlsx, .csv, .json, .sql
     Trả về True nếu lưu thành công, False nếu lỗi.
     """
-    if 'Trạng thái chuyển đổi' and 'Trạng thái chuyển đổi' in df.columns:
-        df = df.drop(columns=['Trạng thái chuyển đổi'])
+    if 'statusState' in df.columns:
+        df = df.drop(columns=['statusState'])
+    if 'id_VNA' in df.columns:
+        df = df.drop(columns=['id_VNA'])
         
     ext = os.path.splitext(output_file)[1].lower()
     if ext == '.xlsx' or ext == '.xls' :

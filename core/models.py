@@ -25,6 +25,7 @@ class Task(Base):
     pending_groups = Column(JSONB, default=list)
     selected_groups = Column(JSONB, default=list)
     columns = Column(JSONB, default=list)
+    step = Column(Integer, default=0)
     result = Column(JSONB, nullable=True)
 
 class TaskEdit(Base):

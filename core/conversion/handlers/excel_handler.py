@@ -75,8 +75,8 @@ def process_excel(input_file: str,
     df = pd.DataFrame(data_rows, columns=header)
     print(f"📊 Đã đọc Excel: {len(df)} mẫu, {len(df.columns)} trường")
 
-    if 'Trạng thái chuyển đổi' not in df.columns:
-        df.insert(len(df.columns), 'Trạng thái chuyển đổi', '')
+    if 'statusState' not in df.columns:
+        df.insert(len(df.columns), 'statusState', '')
 
     # -------------------------------------------------
     # 3. XỬ LÝ DATAFRAME
@@ -93,7 +93,7 @@ def process_excel(input_file: str,
                                     suffix=suffix, 
                                     pool=pool)
         
-    count_success = (df['Trạng thái chuyển đổi'] == 'Thành công').sum()
+    count_success = (df['statusState'] == 'Thành công').sum()
     count_fail = len(df) - count_success
 
     df.insert(0, 'id_VNA', df.index + 1)

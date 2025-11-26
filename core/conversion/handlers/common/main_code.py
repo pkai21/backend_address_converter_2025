@@ -72,13 +72,13 @@ def _process_chunk(args):
                         insert_pos = chunk_df.columns.get_loc(ward_id_col) + 1
                         chunk_df.insert(insert_pos, ward_name_col, '')
                     chunk_df.at[idx, ward_name_col] = ward_new_opt
-            if  chunk_df.at[idx, 'Trạng thái chuyển đổi'] == '':
-                chunk_df.at[idx, 'Trạng thái chuyển đổi'] = 'Thành công'
+            if  chunk_df.at[idx, 'statusState'] == '':
+                chunk_df.at[idx, 'statusState'] = 'Thành công'
         else:
-            if chunk_df.at[idx, 'Trạng thái chuyển đổi'] == '' or chunk_df.at[idx, 'Trạng thái chuyển đổi'] == 'Thành công':
-                chunk_df.at[idx, 'Trạng thái chuyển đổi'] = f'Lỗi {suffix}'
+            if chunk_df.at[idx, 'statusState'] == '' or chunk_df.at[idx, 'statusState'] == 'Thành công':
+                chunk_df.at[idx, 'statusState'] = f'Lỗi {suffix}'
             else:
-                chunk_df.at[idx, 'Trạng thái chuyển đổi'] += f';{suffix}'
+                chunk_df.at[idx, 'statusState'] += f';{suffix}'
     return chunk_df
 
 

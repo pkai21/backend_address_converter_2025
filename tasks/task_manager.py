@@ -5,7 +5,49 @@ from core.models import Task, TaskEdit
 from core.database import engine
 import json
 from sqlalchemy import update
+import numpy as np
+from datetime import datetime, date
 
+def to_serializable(val):
+    if pd.isna(val):
+        return None
+    if isinstance(val, (pd.Timestamp, datetime, date)):
+        return val.isoformat()
+    if isinstance(val, (np.integer, np.int64)):
+        return int(val)
+    if isinstance(val, (np.floating, np.float64)):
+        return float(val)
+    if isinstance(val, np.ndarray):
+        return val.tolist()
+    if isinstance(val, (bytes, bytearray, memoryview)):
+        return None  # hoặc str(val, 'utf-8', errors='ignore') nếu muốn giữ
+    try:
+        # Thử ép kiểu về str nếu là kiểu lạ
+        if hasattr(val, '__str__'):
+            str_val = str(val)
+            if str_val != "":  
+                return str_val
+    except:
+        pass
+    return val
+
+def make_json_serializable(obj):
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items() if v is not None or True}
+    elif isinstance(obj, list):
+        return [make_json_serializable(i) for i in obj]
+    elif pd.isna(obj):
+        return None
+    elif isinstance(obj, (datetime, date, pd.Timestamp)):
+        return obj.isoformat()
+    elif isinstance(obj, (bytes, bytearray, memoryview)):
+        return None  # Bỏ qua hình ảnh, object trong Excel
+    else:
+        try:
+            json.dumps(obj)  # Test xem có serializable không
+            return obj
+        except:
+            return str(obj)  # Cuối cùng thì ép string
 
 def create_task(task_id: str, filename: str, filesize: int, suggested_workers: int = 1):
     with Session(engine) as db:
@@ -29,20 +71,6 @@ def create_task(task_id: str, filename: str, filesize: int, suggested_workers: i
         db.commit()
         db.refresh(task)
 
-def to_serializable(obj):
-    if isinstance(obj, dict):
-        return {k: to_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [to_serializable(i) for i in obj]
-    elif hasattr(obj, 'item'):
-        return obj.item()
-    elif hasattr(obj, 'tolist'):
-        return obj.tolist()
-    elif isinstance(obj, (pd.Timestamp, pd.NaT)):
-        return obj.isoformat() if pd.notna(obj) else None
-    else:
-        return obj
-
 def update_task(task_id: str, **kwargs):
     with Session(engine) as db:
         task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -56,8 +84,8 @@ def update_task(task_id: str, **kwargs):
             if key == "progress":
                 value = min(100, max(0, int(value or 0)))
 
-            if key in ("pending_groups", "selected_groups", "columns","step", "result", "created_at") and value is not None:
-                value = json.loads(json.dumps(value, default=str))
+            if key in ("pending_groups", "selected_groups", "columns", "step", "result", "created_at") and value is not None:
+                value = make_json_serializable(value)
 
             setattr(task, key, value)
 
@@ -93,20 +121,25 @@ def get_merged_full_data(task_id: str):
     if not task or not task.get("result") or "full_data" not in task["result"]:
         return []
 
-    full_data = task["result"]["full_data"][:]  # copy để an toàn
+    full_data = task["result"]["full_data"][:] 
+    final_order = task.get("columns", [])
 
     with Session(engine) as db:
         edits = db.query(TaskEdit).filter(TaskEdit.task_id == task_id).order_by(TaskEdit.edited_at).all()
         for edit in edits:
             idx = edit.row_index
             if 0 <= idx < len(full_data):
-                original_row = full_data[idx] or {}  # dòng gốc
-                edited_row = edit.edited_row or {}   # dữ liệu người dùng sửa
+                original_row = full_data[idx] or {}  
+                edited_row = edit.edited_row or {}  
 
-                # MERGE: ưu tiên edited_row, giữ lại các field cũ nếu không có trong edit
                 merged_row = {**original_row, **edited_row}
                 full_data[idx] = merged_row
 
+    if final_order:
+        full_data = [
+            {col: row.get(col, "") for col in final_order} for row in full_data
+        ]
+    
     return full_data
 
 def apply_edits_to_result(task_id: str):

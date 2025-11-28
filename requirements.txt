@@ -8,3 +8,5 @@ nanoid
 python-dotenv
 sqlalchemy 
 psycopg2-binary
+aiocache
+redis

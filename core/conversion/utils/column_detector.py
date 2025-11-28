@@ -264,16 +264,6 @@ def identify_address_columns_smart(
     p_candidates = filter_candidates_by_keywords(p_candidates, province_keywords)
     d_candidates = filter_candidates_by_keywords(d_candidates, district_keywords)
     w_candidates = filter_candidates_by_keywords(w_candidates, ward_keywords)
-
-    print ('----------------------------')
-    print(id_p_candidates)
-    print(id_d_candidates)
-    print(id_w_candidates)
-    print(p_candidates)
-    print(d_candidates)
-    print(w_candidates)
-    print ('----------------------------')
-
     
     result = _group_address(id_p_candidates,id_d_candidates,id_w_candidates,p_candidates,d_candidates,w_candidates)
 

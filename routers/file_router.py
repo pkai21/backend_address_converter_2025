@@ -15,10 +15,11 @@ from nanoid import generate
 
 from core.conversion.utils.save_file import save_file
 from tasks.task_manager import apply_edits_to_result, create_task, get_merged_full_data, update_task, get_task
-from core.conversion.engine import convert_file_async, convert_file_blocking
+from core.conversion.engine import convert_file_blocking
 from core.conversion.load_file.file_info import get_file_info
 from core.conversion.utils.column_detector import identify_address_columns_smart
 from core.conversion import mapping_table, units
+from core.cache import set_sample_preview, get_sample_preview, cache
 from config.settings import Settings
 from datetime import datetime
 
@@ -50,11 +51,20 @@ async def upload_and_detect(file: UploadFile = File(...)):
 
     create_task(task_id, file.filename, input_path.stat().st_size, suggested_workers)
 
-    sample_df = info["sample_df"].head(5).fillna("")
-    sample_preview = {
-        "columns": sample_df.columns.tolist(),
-        "data_rows": sample_df.to_dict(orient="records")
-    }
+    sample_data = info["sample_df"].head(5).to_dict(orient="records")
+    def clean_for_json(obj):  
+        if isinstance(obj, dict):
+            return {k: clean_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [clean_for_json(i) for i in obj]
+        elif isinstance(obj, (pd.Timestamp, datetime)):
+            return obj.isoformat() if pd.notnull(obj) else None
+        elif pd.isna(obj):  # Xử lý NaN, NaT, None đúng cách
+            return None
+        else:
+            return obj
+    sample_data_clean = clean_for_json(sample_data)
+    await set_sample_preview(task_id, sample_data_clean)
 
     configs, _ = identify_address_columns_smart(info["sample_df"], units)
 
@@ -80,12 +90,36 @@ async def upload_and_detect(file: UploadFile = File(...)):
             "all_columns": info["names"],
             "rows": rows,
             "mb": mb,
-            "suggested_workers": suggested_workers,
-            "sample_preview": sample_preview
+            "suggested_workers": suggested_workers
         }
     }
 
-# 2. BẮT ĐẦU CHUYỂN ĐỔI VỚI CẤU HÌNH ĐÃ CHỌN
+# 2.PREWIEW SAMPLE DỮ LIỆU
+@router.get("/tasks/{task_id}/group-preview")
+async def get_group_preview(
+    task_id: str,
+    col: list[str] = Query(..., description="Danh sách tên cột cần xem preview")
+):
+    sample_data = await get_sample_preview(task_id)
+    if not sample_data:
+        raise HTTPException(404, detail="Dữ liệu mẫu không tồn tại hoặc đã hết hạn")
+
+    # Lọc dữ liệu theo các cột hợp lệ
+    filtered_data = [
+        {k: row[k] for k in col} 
+        for row in sample_data
+    ]
+
+    return {
+        "data": {
+            "columns": col,        
+            "sample_data": filtered_data,     
+            "total_sample_rows": len(sample_data),
+            "cached": True
+        }
+    }
+
+# 3. BẮT ĐẦU CHUYỂN ĐỔI VỚI CẤU HÌNH ĐÃ CHỌN
 @router.post("/start-conversion/{task_id}")
 async def start_conversion(task_id: str, payload: dict):
     groups = payload.get("groups", [])
@@ -108,28 +142,6 @@ async def start_conversion(task_id: str, payload: dict):
     # Chạy blocking (đồng bộ) – vì FE đang chờ response
     await convert_file_blocking(task_id)
 
-    # Sau khi xong → lấy kết quả cuối cùng
-    merged_data = get_merged_full_data(task_id)
-    success_count = sum(1 for r in merged_data if r.get("statusState") == "Thành công")
-    fail_count = len(merged_data) - success_count
-    progress = round(success_count / len(merged_data) * 100, 1) if merged_data else 100
-
-    # Cập nhật task thành công
-    update_task(
-        task_id,
-        status="preview_ready",
-        progress= progress,
-        message="HOÀN THÀNH! Sẵn sàng xem kết quả và chỉnh sửa",
-        columns= [col for col in (merged_data[0].keys() if merged_data else []) if col != "id"],
-        step = 2,
-        result={
-            "total_rows": len(merged_data),
-            "success_count": success_count,
-            "fail_count": fail_count,
-            "full_data": merged_data  
-        }
-    )
-
     # Trả về luôn task đầy đủ → FE không cần gọi thêm gì nữa!
     task = get_task(task_id)
 
@@ -140,7 +152,7 @@ async def start_conversion(task_id: str, payload: dict):
         }
     }
 
-# 3. LẤY TRẠNG THÁI TASK VÀ DỮ LIỆU ĐÃ XỬ LÝ 
+# 4. LẤY TRẠNG THÁI TASK VÀ DỮ LIỆU ĐÃ XỬ LÝ 
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     task = get_task(task_id)
@@ -149,7 +161,7 @@ async def get_task_status(task_id: str):
 
     return {"data": {"task": task}}
 
-# 4. CẬP NHẬT DÒNG THEO id 
+# 5. CẬP NHẬT DÒNG THEO id 
 @router.post("/tasks/{task_id}/row-by-id/{id}")
 async def update_row_by_id(task_id: str, id: str, updated_row: dict):
     task = get_task(task_id)
@@ -217,7 +229,7 @@ async def update_row_by_id(task_id: str, id: str, updated_row: dict):
         }
     }
 
-# 5. TẢI FILE KẾT QUẢ ĐÃ CHUYỂN ĐỔI VỀ
+# 6. TẢI FILE KẾT QUẢ ĐÃ CHUYỂN ĐỔI VỀ
 @router.get("/download-and-save/{task_id}")
 async def download_and_save(task_id: str):
     task = get_task(task_id)
@@ -242,19 +254,19 @@ async def download_and_save(task_id: str):
 
     update_task(task_id, step = 2)
 
+    await cache.delete(task_id)
+
     return FileResponse(
         path=safe_output_path,
         filename=Path(safe_output_path).name,
         media_type="application/octet-stream"
     )
 
-# 6. LẤY DỮ LIỆU ĐÃ LỌC THEO TRẠNG THÁI (THÀNH CÔNG / LỖI)
+# 7. LẤY DỮ LIỆU ĐÃ LỌC THEO TRẠNG THÁI (THÀNH CÔNG / LỖI)
 @router.get("/tasks/{task_id}/filtered-data")
 async def get_filtered_data(
     task_id: str,
-    filter_status: str = "all",
-    page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=10, le=200000)
+    filter_status: str = "all"
 ):
     task = get_task(task_id)
     if not task or task.get("status") != "preview_ready":

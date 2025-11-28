@@ -97,10 +97,14 @@ def process_excel(input_file: str,
     count_fail = len(df) - count_success
 
     df.insert(0, 'id', df.index + 1)
-    
+
+    original_columns =df.columns.tolist()
+    final_columns_order = [col for col in original_columns if col.lower() != "id"]
+
     return {
         "success": True,
-        "full_df": df.to_dict(orient="records"),
+        "full_df": df[original_columns].to_dict(orient="records"),
+        "columns": final_columns_order,
         "total_rows": len(df),
         "success_count": int(count_success),
         "fail_count": int(count_fail),

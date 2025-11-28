@@ -158,7 +158,7 @@ async def update_row_by_id(task_id: str, id: str, updated_row: dict):
     if not task or task.get("status") != "preview_ready":
         raise HTTPException(404, detail="Task không tồn tại hoặc chưa sẵn sàng")
 
-    full_data = get_merged_full_data(task_id)
+    full_data = get_task(task_id)['result']['full_data']
     
     # Tìm dòng theo id (duy nhất)
     row_index = None

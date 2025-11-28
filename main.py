@@ -12,7 +12,7 @@ app = FastAPI(
 # Cho phép Next.js gọi (CORS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # production thì đổi thành domain của bạn
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

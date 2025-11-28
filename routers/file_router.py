@@ -19,7 +19,6 @@ from core.conversion.engine import convert_file_blocking
 from core.conversion.load_file.file_info import get_file_info
 from core.conversion.utils.column_detector import identify_address_columns_smart
 from core.conversion import mapping_table, units
-from core.cache import set_sample_preview, get_sample_preview, cache
 from config.settings import Settings
 from datetime import datetime
 
@@ -29,6 +28,7 @@ UPLOAD_DIR = Path("uploads")
 DOWNLOAD_DIR = Path("downloads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR.mkdir(exist_ok=True)
+SAMPLE_DATA_DIST = {}
 
 # 1. TẢI FILE LÊN VÀ PHÁT HIỆN CỘT ĐỊA CHỈ
 @router.post("/upload-and-detect")
@@ -51,20 +51,8 @@ async def upload_and_detect(file: UploadFile = File(...)):
 
     create_task(task_id, file.filename, input_path.stat().st_size, suggested_workers)
 
-    sample_data = info["sample_df"].head(5).to_dict(orient="records")
-    def clean_for_json(obj):  
-        if isinstance(obj, dict):
-            return {k: clean_for_json(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [clean_for_json(i) for i in obj]
-        elif isinstance(obj, (pd.Timestamp, datetime)):
-            return obj.isoformat() if pd.notnull(obj) else None
-        elif pd.isna(obj):  # Xử lý NaN, NaT, None đúng cách
-            return None
-        else:
-            return obj
-    sample_data_clean = clean_for_json(sample_data)
-    await set_sample_preview(task_id, sample_data_clean)
+    global SAMPLE_DATA_DIST
+    SAMPLE_DATA_DIST = info["sample_df"].head(5).to_dict(orient="records")
 
     configs, _ = identify_address_columns_smart(info["sample_df"], units)
 
@@ -100,22 +88,24 @@ async def get_group_preview(
     task_id: str,
     col: list[str] = Query(..., description="Danh sách tên cột cần xem preview")
 ):
-    sample_data = await get_sample_preview(task_id)
-    if not sample_data:
-        raise HTTPException(404, detail="Dữ liệu mẫu không tồn tại hoặc đã hết hạn")
 
     # Lọc dữ liệu theo các cột hợp lệ
+    global SAMPLE_DATA_DIST
+
+    if not SAMPLE_DATA_DIST:
+        raise HTTPException(400, detail="Chưa có dữ liệu sample. Hãy upload file trước.")
+
+    # Lọc từng row
     filtered_data = [
-        {k: row[k] for k in col} 
-        for row in sample_data
+        {c: row.get(c) for c in col if c in row}
+        for row in SAMPLE_DATA_DIST
     ]
 
     return {
         "data": {
             "columns": col,        
             "sample_data": filtered_data,     
-            "total_sample_rows": len(sample_data),
-            "cached": True
+            "total_sample_rows": len(SAMPLE_DATA_DIST),
         }
     }
 
@@ -253,8 +243,6 @@ async def download_and_save(task_id: str):
         raise HTTPException(500, detail="Lỗi lưu file")
 
     update_task(task_id, step = 2)
-
-    await cache.delete(task_id)
 
     return FileResponse(
         path=safe_output_path,

@@ -232,6 +232,8 @@ async def download_and_save(task_id: str):
     # Sau đó lấy lại task mới nhất
     task = get_task(task_id)
     df = pd.DataFrame(task["result"]["full_data"])
+    columns = task.get("columns", [])
+    df = df[columns]
 
     input_filename = task["filename"]
     pretty_name = Settings.get_output_filename(input_filename)

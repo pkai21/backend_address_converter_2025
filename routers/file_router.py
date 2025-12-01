@@ -83,12 +83,10 @@ async def upload_and_detect(file: UploadFile = File(...)):
     }
 
 # 2.PREWIEW SAMPLE DỮ LIỆU
-@router.get("/tasks/{task_id}/group-preview")
-async def get_group_preview(
-    task_id: str,
-    col: list[str] = Query(..., description="Danh sách tên cột cần xem preview")
-):
-
+@router.post("/tasks/{task_id}/group-preview")
+async def get_group_preview(task_id: str, payload: dict):
+    group = payload.get("group", [])
+    id_group = payload.get("id_group", 0)
     # Lọc dữ liệu theo các cột hợp lệ
     global SAMPLE_DATA_DIST
 
@@ -97,15 +95,16 @@ async def get_group_preview(
 
     # Lọc từng row
     filtered_data = [
-        {c: row.get(c) for c in col if c in row}
+        {c: row.get(c) for c in group if c in row}
         for row in SAMPLE_DATA_DIST
     ]
 
     return {
         "data": {
-            "columns": col,        
+            "columns": group,        
             "sample_data": filtered_data,     
             "total_sample_rows": len(SAMPLE_DATA_DIST),
+            "id_group": id_group
         }
     }
 
@@ -245,6 +244,9 @@ async def download_and_save(task_id: str):
         raise HTTPException(500, detail="Lỗi lưu file")
 
     update_task(task_id, step = 2)
+
+    global SAMPLE_DATA_DIST
+    SAMPLE_DATA_DIST = {}
 
     return FileResponse(
         path=safe_output_path,

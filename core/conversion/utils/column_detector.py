@@ -158,7 +158,7 @@ def _group_address(id_p_cand, id_d_cand, id_w_cand,p_cand, d_cand, w_cand):
     return result
 
 #-----------LỌC CÁC CỘT ĐỊA CHỈ-----------------
-def filter_candidates_by_keywords(candidates, keyword):
+def filter_candidates_by_keywords_for_name(candidates, keyword):
     if not candidates:
         return []
     if len(candidates) == 1:
@@ -169,6 +169,16 @@ def filter_candidates_by_keywords(candidates, keyword):
         if any(kw in col.lower() for kw in keyword):
             filtered.append(col)
     return filtered if filtered else candidates
+
+def filter_candidates_by_keywords_for_id(candidates, keyword):
+    if not candidates:
+        return []
+
+    filtered = []
+    for col in candidates:
+        if any(kw in col.lower() for kw in keyword):
+            filtered.append(col)
+    return filtered 
 
 def identify_address_columns_smart(
     df_sample: pd.DataFrame,
@@ -193,7 +203,7 @@ def identify_address_columns_smart(
     
     df_sample = df_sample.applymap(normalize_sample_value)
 
-    flag = int(len(df_sample) / 100 * 96)
+    flag = int(len(df_sample) / 100 * 80)
 
     id_p_candidates = []
     id_d_candidates = []
@@ -258,12 +268,12 @@ def identify_address_columns_smart(
         'xa','phuong','thi tran','thitran', 'phuongxa'
     ]
 
-    id_p_candidates = check_id_address(filter_candidates_by_keywords(id_p_candidates, province_keywords), numeric_dict)
-    id_d_candidates = check_id_address(filter_candidates_by_keywords(id_d_candidates, district_keywords), numeric_dict)
-    id_w_candidates = check_id_address(filter_candidates_by_keywords(id_w_candidates, ward_keywords), numeric_dict)
-    p_candidates = filter_candidates_by_keywords(p_candidates, province_keywords)
-    d_candidates = filter_candidates_by_keywords(d_candidates, district_keywords)
-    w_candidates = filter_candidates_by_keywords(w_candidates, ward_keywords)
+    id_p_candidates = check_id_address(filter_candidates_by_keywords_for_id(id_p_candidates, province_keywords), numeric_dict)
+    id_d_candidates = check_id_address(filter_candidates_by_keywords_for_id(id_d_candidates, district_keywords), numeric_dict)
+    id_w_candidates = check_id_address(filter_candidates_by_keywords_for_id(id_w_candidates, ward_keywords), numeric_dict)
+    p_candidates = filter_candidates_by_keywords_for_name(p_candidates, province_keywords)
+    d_candidates = filter_candidates_by_keywords_for_name(d_candidates, district_keywords)
+    w_candidates = filter_candidates_by_keywords_for_name(w_candidates, ward_keywords)
     
     result = _group_address(id_p_candidates,id_d_candidates,id_w_candidates,p_candidates,d_candidates,w_candidates)
 

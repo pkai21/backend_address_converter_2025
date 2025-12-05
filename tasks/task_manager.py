@@ -122,7 +122,7 @@ def get_merged_full_data(task_id: str):
         return []
 
     full_data = task["result"]["full_data"][:] 
-    final_order = task.get("columns", [])
+    final_order = list(dict.fromkeys(task.get("columns", []) + ["id"]))
 
     with Session(engine) as db:
         edits = db.query(TaskEdit).filter(TaskEdit.task_id == task_id).order_by(TaskEdit.edited_at).all()

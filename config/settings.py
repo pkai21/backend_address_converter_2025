@@ -9,7 +9,7 @@ class Settings:
     DOWNLOAD_DIR = BASE_DIR / "downloads"
 
     @staticmethod
-    def get_output_filename(input_filename: str) -> str:
+    def get_output_filename_1(input_filename: str) -> str:
         """
         Tạo tên file output 
         Ví dụ: 
@@ -17,7 +17,19 @@ class Settings:
         """
         name, ext = os.path.splitext(input_filename)
     
-        new_name = f"{name}_convert{ext}"      
+        new_name = f"{name}_convert_success{ext}"      
+        return new_name
+    
+    @staticmethod
+    def get_output_filename_0(input_filename: str) -> str:
+        """
+        Tạo tên file output 
+        Ví dụ: 
+        - input: "danh_sach_khach_hang.xlsx" → output: "danh_sach_khach_hang_convert.xlsx"
+        """
+        name, ext = os.path.splitext(input_filename)
+    
+        new_name = f"{name}_convert_error{ext}"      
         return new_name
     
     @classmethod

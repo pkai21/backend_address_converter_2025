@@ -1,8 +1,7 @@
 import os
 import pandas as pd
 
-from core.conversion.handlers.sql_handler import generate_sql_inserts
-
+from core.conversion.handlers.sql_handler import generate_sql_inserts    
 
 def save_excel_file(df: pd.DataFrame, output_file: str) -> None:
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -73,26 +72,54 @@ def save_sql_file(df: pd.DataFrame, output_file: str) -> None:
     
     return True
 
-def save_file(df: pd.DataFrame, output_file: str) -> bool:
+def save_file_1(df: pd.DataFrame, output_file: str) -> bool:
     """
-    Lưu DataFrame vào file với định dạng dựa trên phần mở rộng của output_file.
+    Lưu DataFrame Thành công vào file với định dạng dựa trên phần mở rộng của output_file.
     Hỗ trợ: .xlsx, .csv, .json, .sql
     Trả về True nếu lưu thành công, False nếu lỗi.
     """
-    if 'statusState' in df.columns:
-        df = df.drop(columns=['statusState'])
-    if 'id' in df.columns:
-        df = df.drop(columns=['id'])
+    df_filtered = df[df['statusState'] == 'Thành công'].copy()
+
+    if 'statusState' in df_filtered.columns:
+        df_filtered = df_filtered.drop(columns=['statusState'])
+    if 'id' in df_filtered.columns:
+        df_filtered = df_filtered.drop(columns=['id'])
         
     ext = os.path.splitext(output_file)[1].lower()
     if ext == '.xlsx' or ext == '.xls' :
-        return save_excel_file(df, output_file)
+        return save_excel_file(df_filtered, output_file)
     elif ext == '.csv':
-        return save_csv_file(df, output_file)
+        return save_csv_file(df_filtered, output_file)
     elif ext == '.json':
-        return save_json_file(df, output_file)
+        return save_json_file(df_filtered, output_file)
     elif ext == '.sql':
-        return save_sql_file(df, output_file)
+        return save_sql_file(df_filtered, output_file)
+    else:
+        print(f"❌ Định dạng file không được hỗ trợ: {ext}")
+        return False
+    
+def save_file_0(df: pd.DataFrame, output_file: str) -> bool:
+    """
+    Lưu DataFrame Không thành công vào file với định dạng dựa trên phần mở rộng của output_file.
+    Hỗ trợ: .xlsx, .csv, .json, .sql
+    Trả về True nếu lưu thành công, False nếu lỗi.
+    """
+    df_filtered = df[df['statusState'] != 'Thành công'].copy()
+
+    if 'statusState' in df_filtered.columns:
+        df_filtered = df_filtered.drop(columns=['statusState'])
+    if 'id' in df_filtered.columns:
+        df_filtered = df_filtered.drop(columns=['id'])
+        
+    ext = os.path.splitext(output_file)[1].lower()
+    if ext == '.xlsx' or ext == '.xls' :
+        return save_excel_file(df_filtered, output_file)
+    elif ext == '.csv':
+        return save_csv_file(df_filtered, output_file)
+    elif ext == '.json':
+        return save_json_file(df_filtered, output_file)
+    elif ext == '.sql':
+        return save_sql_file(df_filtered, output_file)
     else:
         print(f"❌ Định dạng file không được hỗ trợ: {ext}")
         return False

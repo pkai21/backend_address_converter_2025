@@ -13,7 +13,7 @@ import uuid
 import pandas as pd
 from nanoid import generate
 
-from core.conversion.utils.save_file import save_file
+from core.conversion.utils.save_file import save_file_0, save_file_1
 from tasks.task_manager import apply_edits_to_result, create_task, get_merged_full_data, update_task, get_task
 from core.conversion.engine import convert_file_blocking
 from core.conversion.load_file.file_info import get_file_info
@@ -218,14 +218,14 @@ async def update_row_by_id(task_id: str, id: str, updated_row: dict):
         }
     }
 
-# 6. TẢI FILE KẾT QUẢ ĐÃ CHUYỂN ĐỔI VỀ
-@router.get("/download-and-save/{task_id}")
-async def download_and_save(task_id: str):
+# 6. TẢI FILE KẾT QUẢ ĐÃ CHUYỂN ĐỔI ĐÚNG
+@router.get("/download-and-save-success/{task_id}")
+async def download_and_save_success(task_id: str):
     task = get_task(task_id)
     if not task or task.get("status") != "preview_ready":
         raise HTTPException(400, detail="Chưa sẵn sàng")
 
-    # Áp dụng hết edit trước khi xuất
+    # Áp dụng hết edit trước khi save
     apply_edits_to_result(task_id)
 
     # Sau đó lấy lại task mới nhất
@@ -235,11 +235,11 @@ async def download_and_save(task_id: str):
     df = df[columns]
 
     input_filename = task["filename"]
-    pretty_name = Settings.get_output_filename(input_filename)
+    pretty_name = Settings.get_output_filename_1(input_filename)
     safe_output_path = Settings._ensure_unique_path(str(DOWNLOAD_DIR / pretty_name))
 
     # Lưu file đúng định dạng
-    success = save_file(df, safe_output_path)
+    success = save_file_1(df, safe_output_path)
     if not success:
         raise HTTPException(500, detail="Lỗi lưu file")
 
@@ -254,7 +254,40 @@ async def download_and_save(task_id: str):
         media_type="application/octet-stream"
     )
 
-# 7. LẤY DỮ LIỆU ĐÃ LỌC THEO TRẠNG THÁI (THÀNH CÔNG / LỖI)
+# 7. TẢI FILE KẾT QUẢ ĐÃ CHUYỂN ĐỔI SAI
+@router.get("/download-and-save-error/{task_id}")
+async def download_and_save_error(task_id: str):
+    task = get_task(task_id)
+    if not task or task.get("status") != "preview_ready":
+        raise HTTPException(400, detail="Chưa sẵn sàng")
+
+    # Áp dụng hết edit trước khi xuất
+    apply_edits_to_result(task_id)
+
+    # Sau đó lấy lại task mới nhất
+    task = get_task(task_id)
+    df = pd.DataFrame(task["result"]["full_data"])
+    columns = task.get("columns", [])
+    df = df[columns]
+
+    input_filename = task["filename"]
+    pretty_name = Settings.get_output_filename_0(input_filename)
+    safe_output_path = Settings._ensure_unique_path(str(DOWNLOAD_DIR / pretty_name))
+
+    # Lưu file đúng định dạng
+    success = save_file_0(df, safe_output_path)
+    if not success:
+        raise HTTPException(500, detail="Lỗi lưu file")
+
+    update_task(task_id, step = 2)
+
+    return FileResponse(
+        path=safe_output_path,
+        filename=Path(safe_output_path).name,
+        media_type="application/octet-stream"
+    )
+
+# 8. LẤY DỮ LIỆU ĐÃ LỌC THEO TRẠNG THÁI (THÀNH CÔNG / LỖI)
 @router.get("/tasks/{task_id}/filtered-data")
 async def get_filtered_data(
     task_id: str,
